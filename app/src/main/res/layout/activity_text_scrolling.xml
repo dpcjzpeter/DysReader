@@ -1,0 +1,345 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/text_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scrollbars="vertical"
+        android:layout_margin="16dp"
+        android:text="v2.37
+personal or classroom use is granted without
+not made or distributed for profit or commerci
+bear this notice and the full citation on the first
+republish, to post on servers, or to redistrib
+specific permission and/or a fee.
+© 1996 ACM-0-89791-746-4/96/008...$3.
+
+Blue Screen Matting
+Alvy Ray Smith and James F. Blinn1
+Microsoft CorporationABSTRACT
+A classical problem of imaging—the matting problem—is sepa-
+ration of a non-rectangular foreground image from a (usually)
+rectangular background image—for example, in a film frame,
+extraction of an actor from a background scene to allow substitu-
+tion of a different background. Of the several attacks on this diffi-
+cult and persistent problem, we discuss here only the special case
+of separating a desired foreground image from a background of a
+constant, or almost constant, backing color. This backing color
+has often been blue, so the problem, and its solution, have been
+called blue screen matting. However, other backing colors, such
+as yellow or (increasingly) green, have also been used, so we of-
+ten generalize to constant color matting. The mathematics of con-
+stant color matting is presented and proven to be unsolvable as
+generally practiced. This, of course, flies in the face of the fact
+that the technique is commonly used in film and video, so we
+demonstrate constraints on the general problem that lead to solu-
+tions, or at least significantly prune the search space of solutions.
+We shall also demonstrate that an algorithmic solution is possible
+by allowing the foreground object to be shot against two constant
+backing colors—in fact, against two completely arbitrary backings
+so long as they differ everywhere.
+Key Words: Blue screen matte creation, alpha channel,
+compositing, chromakey, blue spill, flare, backing shadows,
+backing impurities, separating surfaces, triangulation matting.
+CR Categories: I.3.3, I.4.6, J.5.
+DEFINITIONS
+A matte originally meant a separate strip of monochrome film that
+is transparent at places, on a corresponding strip of color film, that
+one wishes to preserve and opaque elsewhere. So when placed
+together with the strip of color film and projected, light is allowed
+to pass through and illuminate those parts desired but is blocked
+everywhere else. A holdout matte is the complement: It is opaque
+in the parts of interest and transparent elsewhere. In both cases,
+partially dense regions allow some light through. Hence some of
+1 One Microsoft Way, Redmond, WA 98052-6399.
+  alvys@microsoft.com, blinn@microsoft.com.
+Permission to make digital or hard copies of part or all of this work or
+fee provided that copies are
+al advantage and that copies
+ page.  To copy otherwise, to
+ute to lists, requires prior
+50
+259the color film image that is being matted is partially illuminated.
+The use of an alpha channel to form arbitrary compositions of
+images is well-known in computer graphics [9]. An alpha channel
+gives shape and transparency to a color image. It is the digital
+equivalent of a holdout matte—a grayscale channel that has full
+value pixels (for opaque) at corresponding pixels in the color
+image that are to be seen, and zero valued pixels (for transparent)
+at corresponding color pixels not to be seen. We shall use 1 and 0
+to represent these two alpha values, respectively, although a typi-
+cal 8-bit implementation of an alpha channel would use 255 and
+0. Fractional alphas represent pixels in the color image with par-
+tial transparency.
+We shall use “alpha channel” and “matte” interchangeably, it
+being understood that it is really the holdout matte that is the
+analog of the alpha channel.
+The video industry often uses the terms “key” and “keying”—
+as in “chromakeying”—rather than the “matte” and “matting” of
+the film industry. We shall consistently use the film terminology,
+after first pointing out that “chromakey” has now taken on a more
+sophisticated meaning (e.g., [8]) than it originally had (e.g., [19]).
+We shall assume that the color channels of an image are
+premultiplied by the corresponding alpha channel and shall refer
+to this as the premultiplied alpha case (see [9], [14], [15], [2],
+[3]). Derivations with non-premultiplied alpha are not so elegant.
+THE PROBLEM
+The mixing of several pictures—the elements—to form a single
+resulting picture—the composite—is a very general notion. Here
+we shall limit the discussion to a special type of composite fre-
+quently made in film and television, the matte shot. This consists
+of at least two elements, one or more foreground objects each shot
+against a special backing color—typically a bright blue or green—
+and a background. We shall limit ourselves to the case of one
+foreground element for ease of presentation.
+The matting problem can be thought of as a perceptual proc-
+ess: the analysis of a complex visual scene into the objects that
+comprise it. A matte has been successfully pulled, if it in combi-
+nation with the given scene correctly isolates what most humans
+would agree to be a separate object in reality from the other ob-
+jects in the scene, that we can collectively refer to as the back-
+ground. Note that this analysis problem is the reverse of classic
+3D geometry-based computer graphics that synthesizes both the
+object and its matte simultaneously, and hence for which there is
+no matting problem.
+There is also no matting problem of the type we are consider-
+ing in the case of several multi-film matting techniques such as the
+sodium, infrared, and ultraviolet processes [6], [16]. These record
+the foreground element on one strip of film and its matte simulta-
+neously on another strip of film.
+2
+The problem we address here is that of extracting a matte for a
+foreground object, given only a composite image containing it.
+We shall see that, in general, this is an underspecified problem,
+even in the case where the background consists of a single back-
+ing color. Note that a composite image contains no explicit infor-
+mation about what elements comprise it. We use the term
+“composite” to convey the idea that the given image is in fact a
+representation of several objects seen simultaneously. The prob-
+lem, of course, is to determine, the objecthood of one or more of
+these objects. In the film (or video) world, the problem is to ex-
+tract a matte in a single-film process—that is, one with no special
+knowledge about the object to be extracted, such as might be
+contained in a separate piece of film exposed simultaneously in a
+multi-film process.
+Now a formal presentation of the problem: The color C = [R
+G  B  α] at each point of a desired composite will be some func-
+tion of the color Cf of the foreground and color Cb of the new
+background at the corresponding points in the two elements. We
+have for convenience extended the usual color triple to a quadru-
+ple by appending the alpha value. As already mentioned, each of
+the first three primary color coordinates is assumed to have been
+premultiplied by the alpha coordinate. We shall sometimes refer
+to just these coordinates with the abbreviation c = [R  G  B], for
+color C. For any subscript i, Ci = [Ri  Gi  Bi  αi] and ci = [Ri  Gi
+Bi]. Each of the four coordinates is assumed to lie on [0, 1]. We
+shall always assume that αf = αb = 1 for Cf and Cb—i.e., the given
+foreground and new background are opaque rectangular images.
+The foreground element Cf can be thought of as a composite
+of a special background, all points of which have the (almost)
+constant backing color Ck, and a foreground Co that is the fore-
+ground object in isolation from any background and which is
+transparent, or partially so, whenever the backing color would
+show through. We sometimes refer to Co as the uncomposited
+foreground color. Thus Cf = f(Co, Ck) expresses the point-by-point
+foreground color as a given composite f of Ck and Co. We shall
+always take αk = 1 for Ck.
+We assume that f is the over function [9], Ca + (1 – αa) Cb,
+combining Cb with (premultiplied) Ca by amount αa, 0 ≤ αa ≤ 1.
+One of the features of the premultiplied alpha formulation is that
+the math applied to the three primary color coordinates is the
+same as that applied to the alpha coordinate. An alpha channel
+holds the factor αa at every point in an image, so we will use
+channel and coordinate synonymously. This facilitates:
+The Matting Problem
+Given Cf and Cb at corresponding points, and Ck a known backing
+color, and assuming Cf = Co + (1 – αo)Ck , determine Co which
+then gives composite color C = Co + (1 – αo)Cb at the corre-
+sponding point, for all points that Cf and Cb share in common.
+We shall call Co—that is, the color, including alpha, of a fore-
+ground object—a solution to the Matting Problem. Once it is
+known at each point, we can compute C at each point to obtain
+the desired result, a composite over a new background presumably
+more interesting than a single constant color. We shall refer to the
+equation for Cf above as the Matting Equation. We sometimes
+refer to an uncomposited foreground object (those pixels with αo
+> 0) as an image sprite, or simply a sprite.
+PREVIOUS WORK
+Blue screen matting has been used in the film and video industries
+for many years [1], [6], [21] and has been protected under patents260[17], [18], [19], [20] until recently. The most recent of these ex-
+pired July, 1995. Newer patents containing refinements of the
+process still exist, however. Any commercial use of the blue
+screen process or extensions should be checked carefully against
+the extant patents—e.g., [22], [23], [24], [25], [5], [4].
+An outstanding inventor in the field is Petro Vlahos, who de-
+fined the problem and invented solutions to it in film and then in
+video. His original film solution is called the color-difference
+technique. His video solution is realized in a piece of equipment,
+common to the modern video studio, called the Ultimatte®. It is
+essentially an electronic analog of the earlier color-difference film
+technique. He was honored in 1995 with an Academy Award for
+lifetime achievement, shared with his son Paul.
+Vlahos makes one observation essential to his work. We shall
+call it the Vlahos Assumption: Blue screen matting is performed
+on foreground objects for which the blue is related to the green by
+Bo ≤ a2Go. The usual range allowed by his technique is .5 ≤ a2 ≤
+1.5 [20]. That this should work as often as it does is not obvious.
+We shall try to indicate why in this paper.
+The Vlahos formula for αo, abstracted from the claims of his
+earliest electronic patent [18] and converted to our notation, is
+αo = 1 – a1(Bf – a2Gf),
+clamped at its extremes to 0 and 1, where the ai are tuning ad-
+justment constants (typically made available as user controls). We
+will call this the First Vlahos Form. The preferred embodiment
+described in the patent replaces Bf above with min(Bf, Bk), where
+Bk is the constant backing color (or the minimum such color if its
+intensity varies, as it often does in practice). In the second step of
+the Vlahos process, the foreground color is further modified be-
+fore compositing with a new background by clamping its blue
+component to min(Bf, a2Gf).
+A more general Vlahos electronic patent [20] introduces
+αo = 1 – a1(Bf – a2(a5 max(r, g) + (1 – a5)min(r, g))),
+where r = a3Rf, g = a4Gf, and the ai are adjustment parameters.
+Clamping again ensures 0 and 1 as limiting values. We shall call
+this the Second Vlahos Form. Again the blue component of the
+foreground image is modified before further processing.
+A form for αo from a recent patent [4] (one of several new
+forms) should suffice to show the continued refinements intro-
+duced by Vlahos and his colleagues at Ultimatte Corp.:
+αo = 1 – ((Bf – a1) – a2 max(r, g) – max(a5(Rf – Gf), a6(Gf – Rf))),
+with clamping as before. They have continually extended the
+number of foreground objects that can be matted successfully.
+We believe Vlahos et al. arrived at these forms by many years
+of experience and experiment and not by an abstract mathematical
+approach such as presented here. The forms we derive are related
+to their forms, as we shall show, but more amenable to analysis.
+With these patents Vlahos defined and attacked several prob-
+lems of matting: blue spill or blue flare (reflection of blue light
+from the blue screen on the foreground object), backing shadows
+on the blue screen (shadows of the foreground object on the
+backing, that one wishes to preserve as part of the foreground
+object), and backing impurities (departures of a supposedly pure
+blue backing screen from pure blue). We shall touch on these
+issues further in later sections.
+Another contribution to matting [8] is based on the following
+thinking: Find a family of nested surfaces in colorspace that sepa-
+rate the foreground object colors from the backing colors. Each
+surface, corresponding to a value of αo, is taken to be the set of
+colors that are the αo blend of the foreground and backing colors.
+3
+See Fig. 4. The Primatte® device from Photron Ltd., based on this
+concept, uses a nested family of convex multi-faceted polyhedra
+(128 faces) as separating surfaces. We shall discuss problems with
+separating surface models in a later section.
+THE INTRINSIC DIFFICULTY
+We now show that single-film matting, as typically practiced in a
+film or video effects house, is intrinsically difficult. In fact, we
+show that there is an infinity of solutions. This implies that there
+is no algorithmic method for pulling a matte from a given fore-
+ground element. There must be a human—or perhaps someday a
+sufficiently intelligent piece of image processing software—in the
+loop who “knows” a correct matte when he (she or it) sees one,
+and he must be provided with a sufficiently rich set of controls
+that he can successfully “home in” on a good matte when in the
+neighborhood of one. The success of a matting machine, such as
+the Ultimatte or Primatte, reduces then to the cleverness of its
+designers in selecting and providing such a set of controls.
+The argument goes as follows: We know that Rf is an inter-
+polation from Rk to Ro with weight αo, or Rf = Ro  + (1 – αo)Rk,
+and that similar relations hold for Gf and Bf. This is cf = co  + (1 –
+αo)ck in our abbreviated notation. (We ignore the relation for αf
+because it is trivial.) A complete solution requires Ro, Go, Bo, and
+αo. Thus we have three equations and four unknowns, an incom-
+pletely specified problem and hence an infinity of solutions, un-
+solvable without more information.
+There are some special cases where a solution to the matting
+problem does exist and is simple.
+SOLUTION 1: NO BLUE
+If co is known to contain no blue, co = [Ro  Go  0], and ck contains
+only blue, ck = [0  0  Bk], then
+[ ]c c c R G Bf o o k o o o k= + − = −( ) ( )1 1α α .
+Thus, solving the Bf = (1 − αo) Bk equation for αo gives solution
+C R G
+B
+Bo f f
+f
+k
+= −
+
+
+
+
+
+0 1 ,   if Bk ≠ 0.
+This example is exceedingly ideal. The restriction to fore-
+ground objects with no blue is quite serious, excluding all grays
+but black, about two-thirds of all hues, and all pastels or tints of
+the remaining hues (because white contains blue). Basically, it is
+only valid for one plane of the 3D RGB colorspace, the RG plane.
+The assumption of a perfectly flat and perfectly blue backing
+color is not realistic. Even very carefully prepared “blue screens”
+used in cinema special effects as backings have slight spatial
+brightness variations and also have some red and green impurities
+(backing impurities). A practical solution for brightness varia-
+tions, in the case of repeatable shots, is this: Film a pass without
+the foreground object to produce a record of Bk at each point to be
+used for computing Co after a second pass with the object.
+We rather arbitrarily chose pure blue to be the backing color.
+This is an idealization of customary film and video practice
+(although one sees more and more green screens in video). We
+shall soon show how to generalize to arbitrary and non-constant
+backing colors and hence do away with the so-called backing
+impurities problem in certain circumstances.
+SOLUTION 2: GRAY OR FLESH
+The matting problem can be solved if co is known to be gray. We
+can loosen this claim to say it can be solved if either Ro or Go
+equals Bo. In fact, we can make the following general statement:261There is a solution to the matting problem if Ro or Go = aBo + bαo,
+and if ck is pure blue with aBk + b ≠ 0. To show this, we derive the
+solution Co for the green case, since the solution for red can be
+derived similarly:
+The conditions, rewritten in color primary coordinates, are:
+[ ]c R aB b B Bf o o o o o k= + + −α α( )1 .
+Eliminate Bo from the expressions for Gf and Bf to solve for αo:
+C R G B B
+G aB
+aB bo f f o k
+f
+k
+= +
+−
++
+
+
+
+
+
+
+
+
+∆
+∆α ,   if aBk + b ≠ 0.
+Here we have introduced a very useful definition C∆ = Cf – Ck .
+The special case Co gray clearly satisfies Solution 2, with a =
+1 and b = 0 for both Ro and Go. Thus it is not surprising that sci-
+ence fiction space movies effectively use the blue screen process
+(the color-difference technique) since many of the foreground
+objects are neutrally colored spacecraft. As we know from prac-
+tice, the technique often works adequately well for desaturated
+(towards gray) foreground objects, typical of many real-world
+objects.
+A particularly important foreground element in film and video
+is flesh which typically has color [d  .5d  .5d]. Flesh of all races
+tends to have the same ratio of primaries, so d is the darkening or
+lightening factor. This is a non-gray example satisfying Solution
+2, so it is not surprising that the blue screen process works for
+flesh.
+Notice that the condition Go = aBo + bαo, with 2/3 ≤ a ≤ 2 and
+b = 0, resembles the Vlahos Assumption, Bo ≤ a2Go. In the special
+case b = 0, our derived expression for αo can be seen to be of the
+same form as the First Vlahos Form:">
+    </TextView>
+</LinearLayout>
